@@ -33,3 +33,10 @@ test/sim_build/
 test/results.xml
 test/*.fst
 test/*.vcd
+.venv/
+__pycache__/
+test/build/
+test/sim_build/
+test/results.xml
+test/*.fst
+test/*.vcd
