@@ -29,7 +29,7 @@ jobs:
           make clean
           make
           # make will return success even if the tests fail, so check results.xml for failed tests
-          python -m cocotb_tools.check_results results.xml
+          python -c "import xml.etree.ElementTree as E; r=E.parse('results.xml').getroot(); assert list(r.iter('testcase')), 'No tests ran'; assert not list(r.iter('failure')) and not list(r.iter('error')), 'Tests failed'"
 
       - name: Test Summary
         uses: test-summary/action@v2.4

@@ -1,42 +1,58 @@
-![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
+# ChaCha20 Tiny Tapeout SKY130 baseline
 
-# Tiny Tapeout Verilog Project Template
+Working RTL baseline using the existing 1QR/128-bit-output core, with a
+synchronous byte-wide Tiny Tapeout wrapper. See [protocol](docs/info.md) and
+[measured status](reports/STATUS.md).
 
-- [Read the documentation for project](docs/info.md)
+## Validation
 
-## What is Tiny Tapeout?
+Run `python3 test/run.py` (Python 3.9+ and Icarus Verilog). The dependency-free
+suite checks 53 vectors and protocol/reset behaviour. For template Cocotb jobs,
+install `test/requirements.txt`, then run `make -C test`. That alternate harness
+is supplied for integration and was not run in the current environment.
 
-Tiny Tapeout is an educational project that aims to make it easier and cheaper than ever to get your digital and analog designs manufactured on a real chip.
+For exploratory SKY130 mapping:
 
-To learn more and get started, visit https://tinytapeout.com.
+```sh
+python3 scripts/synth.py --liberty /absolute/path/to/sky130_fd_sc_hd__tt_025C_1v80.lib
+python3 scripts/synth.py --top chacha20_core --liberty /absolute/path/to/sky130_fd_sc_hd__tt_025C_1v80.lib
+python3 scripts/gate_test.py --liberty /absolute/path/to/sky130_fd_sc_hd__tt_025C_1v80.lib
+```
 
-## Set up your Verilog project
+## Apply to the official template
 
-1. Add your Verilog files to the `src` folder.
-2. Edit the [info.yaml](info.yaml) and update information about your project, paying special attention to the `source_files` and `top_module` properties. If you are upgrading an existing Tiny Tapeout project, check out our [online info.yaml migration tool](https://tinytapeout.github.io/tt-yaml-upgrade-tool/).
-3. Edit [docs/info.md](docs/info.md) and add a description of your project.
-4. Adapt the testbench to your design. See [test/README.md](test/README.md) for more information.
+This archive is an overlay, not a cloned GitHub repository. Network access to
+GitHub was unavailable during creation; official workflow files have not been
+invented or replaced. With network access, run:
 
-The GitHub action will automatically build the ASIC files using [LibreLane](https://www.zerotoasiccourse.com/terminology/librelane/).
+```sh
+python3 scripts/setup_template.py ../ttsky-chacha20
+```
 
-## Enable GitHub actions to build the results page
+This clones https://github.com/TinyTapeout/ttsky-verilog-template into a new
+folder, overlays this project, and retains its official GDS/docs workflows.
+Use your own GitHub repository as the remote before pushing. Alternatively,
+create a repository using GitHub's "Use this template" button and copy src/,
+test/, docs/, scripts/, info.yaml and the additional RTL workflow into it.
+Do not submit the example project or retain its example test as your validation.
 
-- [Enabling GitHub Pages](https://tinytapeout.com/faq/#my-github-action-is-failing-on-the-pages-part)
+`info.yaml` initially requests **4x2 (eight) tiles**, with a 10 MHz target.
+This is conservative routing headroom, NOT a verified passing allocation.
+After official GDS/precheck and gate-level tests pass, try 3x2, then 2x2;
+retain the smallest allocation that passes all timing/routing/signoff checks.
+One and two tiles are not credible allocations for this unchanged baseline
+based on the exploratory mapped cell area.
 
-## Resources
+## Provenance and limits
 
-- [FAQ](https://tinytapeout.com/faq/)
-- [Digital design lessons](https://tinytapeout.com/digital_design/)
-- [Learn how semiconductors work](https://tinytapeout.com/siliwiz/)
-- [Join the community](https://tinytapeout.com/discord)
-- [Build your design locally](https://www.tinytapeout.com/guides/local-hardening/)
+The original chacha20_core.v is preserved from the supplied 1QR source. Only
+its text was copied; no architectural optimizations were made. New wrapper,
+tests and scripts are included. No license change is imposed on your original
+RTL; choose an appropriate project license before publishing it. Preserve the
+official template's license for its files.
 
-## What next?
-
-- [Submit your design to the next shuttle](https://app.tinytapeout.com/).
-- Edit [this README](README.md) and explain your design, how it works, and how to test it.
-- Share your project on your social network of choice:
-  - LinkedIn [#tinytapeout](https://www.linkedin.com/search/results/content/?keywords=%23tinytapeout) [@TinyTapeout](https://www.linkedin.com/company/100708654/)
-  - Mastodon [#tinytapeout](https://chaos.social/tags/tinytapeout) [@matthewvenn](https://chaos.social/@matthewvenn)
-  - X (formerly Twitter) [#tinytapeout](https://twitter.com/hashtag/tinytapeout) [@tinytapeout](https://twitter.com/tinytapeout)
-  - Bluesky [@tinytapeout.com](https://bsky.app/profile/tinytapeout.com)
+Only the first 16 bytes of each 64-byte ChaCha20 keystream block are used, as in
+the original core. This is not an authenticated-encryption implementation.
+SKY130 synthesis is exploratory: the library is from a local OpenROAD test
+fixture, not a pinned target-shuttle PDK, and ABC was run without a delay target.
+No post-route area, maximum clock, DRC/LVS pass, GDS or minimum tile count is claimed.
