@@ -1,16 +1,10 @@
-"""Tests for the fixed-nonce, fixed-counter Tiny Tapeout wrapper."""
 import cocotb
 from cocotb.triggers import Timer
-from reference import block, vectors
-
-# RTL packed nonce: 96'h000000000000004A00000000
-# Reference representation: little-endian bytes within each word.
-FIXED_NONCE = bytes.fromhex("000000004a00000000000000")
-FIXED_COUNTER = 1
+from preset_vectors import cases
 
 
 @cocotb.test()
-async def known_and_random_vectors(d):
+async def preset_keys_and_protocol(d):
     d.clk.value = 0
     d.ena.value = 1
     d.rst_n.value = 0
@@ -31,24 +25,27 @@ async def known_and_random_vectors(d):
 
     assert int(d.uio_oe.value) == 0xF0
 
-    # Starting before loading a complete frame must fail.
+    # Reject premature start.
     await step(2)
     assert int(d.uio_out.value) & 0x80
-
-    # Abort clears the error.
     await step(8)
     assert int(d.uio_out.value) == 0
 
-    for index, (key, _, _, plaintext) in enumerate(vectors()):
-        # Only key and plaintext are transmitted.
-        frame = key + plaintext
-        assert len(frame) == 48
+    # Reject invalid key selector.
+    await step(1, 8)
+    assert int(d.uio_out.value) & 0x80
+    await step(8)
+    assert int(d.uio_out.value) == 0
+
+    for index, (frame, expected) in enumerate(cases()):
+        assert len(frame) == 17
 
         for byte in frame:
             await step(1, byte)
 
-        assert int(d.uio_out.value) & 0x20, "Not ready after 48 bytes"
-        assert not (int(d.uio_out.value) & 0x80), "Load error"
+        status = int(d.uio_out.value)
+        assert status & 0x20, "Not ready after 17 bytes"
+        assert not (status & 0x80), "Unexpected load error"
 
         await step(2)
         assert int(d.uio_out.value) & 0x10, "Busy not asserted"
@@ -60,11 +57,6 @@ async def known_and_random_vectors(d):
         else:
             assert False, "Completion timeout"
 
-        keystream = block(key, FIXED_NONCE, FIXED_COUNTER)
-        expected = bytes(
-            p ^ k for p, k in zip(plaintext, keystream)
-        )
-
         for byte_index, expected_byte in enumerate(expected):
             actual = int(d.uo_out.value)
             assert actual == expected_byte, (
@@ -75,8 +67,10 @@ async def known_and_random_vectors(d):
 
         assert not (int(d.uio_out.value) & 0x40)
         assert not (int(d.uio_out.value) & 0x80)
+        assert int(d.uo_out.value) == 0
 
-    # Abort a partially loaded frame.
+    # Abort a partial transaction.
+    await step(1, 0)
     await step(1, 255)
     await step(8)
     assert int(d.uio_out.value) == 0

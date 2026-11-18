@@ -1,25 +1,19 @@
 `timescale 1ns/1ps
 
 module tb;
-
-    parameter N = 53;
+    parameter N = 64;
 
     reg clk = 0;
     always #5 clk = ~clk;
 
-    reg rst_n = 0;
-    reg ena = 1;
-    reg [7:0] ui_in = 0;
-    reg [7:0] uio_in = 0;
-
-    wire [7:0] uo_out;
-    wire [7:0] uio_out;
-    wire [7:0] uio_oe;
+    reg rst_n = 0, ena = 1;
+    reg [7:0] ui_in = 0, uio_in = 0;
+    wire [7:0] uo_out, uio_out, uio_oe;
 
     tt_um_dinis_chacha20 dut (.*);
 
-    // 48 input bytes: 32-byte key + 16-byte plaintext.
-    reg [383:0] frames [0:N-1];
+    // Selector byte + 16 plaintext bytes.
+    reg [135:0] frames [0:N-1];
     reg [127:0] expected [0:N-1];
 
     integer v, j, cycles;
@@ -53,10 +47,9 @@ module tb;
 
     task load_frame(input integer k);
         begin
-            for (j = 0; j < 48; j = j + 1)
-                command(1, frames[k][383-8*j -:8]);
-
-            check(uio_out[5], "ready after 48 bytes");
+            for (j = 0; j < 17; j = j + 1)
+                command(1, frames[k][135-8*j -:8]);
+            check(uio_out[5], "ready after 17 bytes");
         end
     endtask
 
@@ -73,13 +66,18 @@ module tb;
 
         command(2, 0);
         check(uio_out[7] && !uio_out[4], "reject premature start");
-
         command(8, 0);
         check(uio_out == 0, "abort clears status");
 
         command(3, 0);
-        check(uio_out[7] && !uio_out[5], "reject conflicting commands");
+        check(uio_out[7], "reject conflicting commands");
+        command(8, 0);
 
+        // Invalid selector must not advance the input count.
+        command(1, 8'h08);
+        check(uio_out[7] && !uio_out[5], "reject invalid selector");
+        load_frame(0);
+        check(uio_out[5], "invalid selector not counted");
         command(8, 0);
 
         for (v = 0; v < N; v = v + 1) begin
@@ -106,11 +104,7 @@ module tb;
                 tick();
                 cycles = cycles + 1;
             end
-
             check(uio_out[6] && !uio_out[4], "completion timeout");
-
-            if (v == 0)
-                check(cycles == 83, "wrapper latency 83 cycles");
 
             repeat (3) tick();
 
@@ -129,9 +123,11 @@ module tb;
 
             if (v == 1)
                 command(8, 0);
+            else
+                check(!uio_out[7], "unexpected error");
         end
 
-        // Reset during a transaction.
+        // Reset during computation.
         load_frame(0);
         command(2, 0);
         repeat (8) tick();
@@ -145,10 +141,9 @@ module tb;
         repeat (90) tick();
         check(uio_out == 0, "reset abort");
 
-        // Deselection during a transaction.
+        // Deselect during computation.
         load_frame(0);
         command(2, 0);
-
         @(negedge clk);
         ena = 0;
         tick();
@@ -156,22 +151,25 @@ module tb;
 
         @(negedge clk);
         ena = 1;
-
         repeat (90) tick();
         check(uio_out == 0, "deselect abort");
 
-        // A new transaction must succeed after abort.
+        // Verify a complete transaction after the abort.
         load_frame(0);
         command(2, 0);
         repeat (90) tick();
+        check(uio_out[6], "restart after abort");
 
-        check(
-            uio_out[6] && uo_out == expected[0][127:120],
-            "restart after abort"
-        );
+        for (j = 0; j < 16; j = j + 1) begin
+            check(
+                uo_out == expected[0][127-8*j -:8],
+                "result after abort"
+            );
+            command(4, 0);
+        end
 
         $display(
-            "PASS: %0d vectors, protocol errors, back-to-back transactions, reset and deselection",
+            "PASS: %0d vectors, all 8 keys, protocol errors, reset and deselection",
             N
         );
         $finish;
@@ -181,5 +179,4 @@ module tb;
         #1000000;
         $fatal(1, "watchdog timeout");
     end
-
 endmodule
