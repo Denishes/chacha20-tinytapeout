@@ -1,69 +1,185 @@
 `timescale 1ns/1ps
+
 module tb;
-parameter N=53;
-reg clk=0; always #5 clk=~clk;
-reg rst_n=0,ena=1;
-reg [7:0] ui_in=0,uio_in=0;
-wire [7:0] uo_out,uio_out,uio_oe;
-tt_um_dinis_chacha20 dut(.*);
-reg [511:0] frames[0:N-1]; reg [127:0] expected[0:N-1];
-integer v,j,cycles;
-task tick; begin @(posedge clk); #1; end endtask
-task command(input [3:0] cmd,input [7:0] data);
-begin @(negedge clk);uio_in={4'b0,cmd};ui_in=data;tick();
-      @(negedge clk);uio_in=0;end endtask
-task check(input condition,input [255:0] msg);
-begin if(condition!==1'b1) begin $display("FAIL: %s",msg);$fatal;end end endtask
-task load_frame(input integer k);
-begin
- for(j=0;j<64;j=j+1) command(1,frames[k][511-8*j -:8]);
- check(uio_out[5],"ready after 64 bytes");
-end endtask
-initial begin
- $readmemh("frames.hex",frames);$readmemh("expected.hex",expected);
- tick();tick();@(negedge clk);rst_n=1;
- check(uio_oe==8'hf0,"pin directions");
- command(2,0); check(uio_out[7]&&!uio_out[4],"reject premature start");
- command(8,0);check(uio_out==0,"abort clears status");
- command(3,0);check(uio_out[7]&&!uio_out[5],"reject conflicting commands");
- command(8,0);
- for(v=0;v<N;v=v+1) begin
-  load_frame(v);
-  if(v==0) begin
-    command(1,8'hff);check(uio_out[7]&&uio_out[5],"reject extra byte");
-    command(8,0);load_frame(v);
-  end
-  command(2,0);check(uio_out[4],"busy after start");
-  if(v==1) begin
-    command(1,8'hff);command(2,0);
-    check(uio_out[7],"busy command rejection");
-  end
-  cycles=0;
-  while(!uio_out[6]&&cycles<100) begin tick();cycles=cycles+1;end
-  check(uio_out[6]&&!uio_out[4],"completion timeout");
-  if(v==0) check(cycles==83,"wrapper latency 83 cycles");
-  repeat(3) tick();
-  for(j=0;j<16;j=j+1) begin
-    if(uo_out!==expected[v][127-8*j -:8]) begin
-      $display("vector %0d byte %0d got %02x expected %02x",v,j,uo_out,expected[v][127-8*j -:8]);$fatal;
+
+    parameter N = 53;
+
+    reg clk = 0;
+    always #5 clk = ~clk;
+
+    reg rst_n = 0;
+    reg ena = 1;
+    reg [7:0] ui_in = 0;
+    reg [7:0] uio_in = 0;
+
+    wire [7:0] uo_out;
+    wire [7:0] uio_out;
+    wire [7:0] uio_oe;
+
+    tt_um_dinis_chacha20 dut (.*);
+
+    // 48 input bytes: 32-byte key + 16-byte plaintext.
+    reg [383:0] frames [0:N-1];
+    reg [127:0] expected [0:N-1];
+
+    integer v, j, cycles;
+
+    task tick;
+        begin
+            @(posedge clk);
+            #1;
+        end
+    endtask
+
+    task command(input [3:0] cmd, input [7:0] data);
+        begin
+            @(negedge clk);
+            uio_in = {4'b0, cmd};
+            ui_in = data;
+            tick();
+            @(negedge clk);
+            uio_in = 0;
+        end
+    endtask
+
+    task check(input condition, input [255:0] msg);
+        begin
+            if (condition !== 1'b1) begin
+                $display("FAIL: %s", msg);
+                $fatal(1);
+            end
+        end
+    endtask
+
+    task load_frame(input integer k);
+        begin
+            for (j = 0; j < 48; j = j + 1)
+                command(1, frames[k][383-8*j -:8]);
+
+            check(uio_out[5], "ready after 48 bytes");
+        end
+    endtask
+
+    initial begin
+        $readmemh("frames.hex", frames);
+        $readmemh("expected.hex", expected);
+
+        tick();
+        tick();
+        @(negedge clk);
+        rst_n = 1;
+
+        check(uio_oe == 8'hf0, "pin directions");
+
+        command(2, 0);
+        check(uio_out[7] && !uio_out[4], "reject premature start");
+
+        command(8, 0);
+        check(uio_out == 0, "abort clears status");
+
+        command(3, 0);
+        check(uio_out[7] && !uio_out[5], "reject conflicting commands");
+
+        command(8, 0);
+
+        for (v = 0; v < N; v = v + 1) begin
+            load_frame(v);
+
+            if (v == 0) begin
+                command(1, 8'hff);
+                check(uio_out[7] && uio_out[5], "reject extra byte");
+                command(8, 0);
+                load_frame(v);
+            end
+
+            command(2, 0);
+            check(uio_out[4], "busy after start");
+
+            if (v == 1) begin
+                command(1, 8'hff);
+                command(2, 0);
+                check(uio_out[7], "busy command rejection");
+            end
+
+            cycles = 0;
+            while (!uio_out[6] && cycles < 100) begin
+                tick();
+                cycles = cycles + 1;
+            end
+
+            check(uio_out[6] && !uio_out[4], "completion timeout");
+
+            if (v == 0)
+                check(cycles == 83, "wrapper latency 83 cycles");
+
+            repeat (3) tick();
+
+            for (j = 0; j < 16; j = j + 1) begin
+                if (uo_out !== expected[v][127-8*j -:8]) begin
+                    $display(
+                        "vector %0d byte %0d got %02x expected %02x",
+                        v, j, uo_out, expected[v][127-8*j -:8]
+                    );
+                    $fatal(1);
+                end
+                command(4, 0);
+            end
+
+            check(!uio_out[6] && uo_out == 0, "output drain");
+
+            if (v == 1)
+                command(8, 0);
+        end
+
+        // Reset during a transaction.
+        load_frame(0);
+        command(2, 0);
+        repeat (8) tick();
+
+        @(negedge clk);
+        rst_n = 0;
+        tick();
+        @(negedge clk);
+        rst_n = 1;
+
+        repeat (90) tick();
+        check(uio_out == 0, "reset abort");
+
+        // Deselection during a transaction.
+        load_frame(0);
+        command(2, 0);
+
+        @(negedge clk);
+        ena = 0;
+        tick();
+        check(uio_oe == 0 && uo_out == 0, "deselected outputs");
+
+        @(negedge clk);
+        ena = 1;
+
+        repeat (90) tick();
+        check(uio_out == 0, "deselect abort");
+
+        // A new transaction must succeed after abort.
+        load_frame(0);
+        command(2, 0);
+        repeat (90) tick();
+
+        check(
+            uio_out[6] && uo_out == expected[0][127:120],
+            "restart after abort"
+        );
+
+        $display(
+            "PASS: %0d vectors, protocol errors, back-to-back transactions, reset and deselection",
+            N
+        );
+        $finish;
     end
-    command(4,0);
-  end
-  check(!uio_out[6]&&uo_out==0,"output drain");
-  if(v==1) command(8,0);
- end
- // Reset and deselection during a transaction must abort without stale data.
- load_frame(0);command(2,0);repeat(8)tick();
- @(negedge clk);rst_n=0;tick();@(negedge clk);rst_n=1;
- repeat(90)tick();check(uio_out==0,"reset abort");
- load_frame(0);command(2,0);@(negedge clk);ena=0;tick();
- check(uio_oe==0&&uo_out==0,"deselected outputs");
- @(negedge clk);ena=1;repeat(90)tick();check(uio_out==0,"deselect abort");
- // A full new transaction succeeds after abort.
- load_frame(0);command(2,0);repeat(90)tick();
- check(uio_out[6]&&uo_out==8'h10,"restart after abort");
- $display("PASS: %0d vectors, protocol errors, back-to-back transactions, reset and deselection",N);
- $finish;
-end
-initial begin #1000000;$fatal(1,"watchdog timeout");end
+
+    initial begin
+        #1000000;
+        $fatal(1, "watchdog timeout");
+    end
+
 endmodule
