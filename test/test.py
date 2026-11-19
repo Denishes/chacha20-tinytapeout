@@ -50,7 +50,7 @@ async def preset_keys_and_protocol(d):
         await step(2)
         assert int(d.uio_out.value) & 0x10, "Busy not asserted"
 
-        for _ in range(100):
+        for _ in range(400):
             await step()
             if int(d.uio_out.value) & 0x40:
                 break

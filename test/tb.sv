@@ -100,7 +100,7 @@ module tb;
             end
 
             cycles = 0;
-            while (!uio_out[6] && cycles < 100) begin
+            while (!uio_out[6] && cycles < 400) begin
                 tick();
                 cycles = cycles + 1;
             end
@@ -138,7 +138,7 @@ module tb;
         @(negedge clk);
         rst_n = 1;
 
-        repeat (90) tick();
+        repeat (400) tick();
         check(uio_out == 0, "reset abort");
 
         // Deselect during computation.
@@ -151,13 +151,13 @@ module tb;
 
         @(negedge clk);
         ena = 1;
-        repeat (90) tick();
+        repeat (400) tick();
         check(uio_out == 0, "deselect abort");
 
         // Verify a complete transaction after the abort.
         load_frame(0);
         command(2, 0);
-        repeat (90) tick();
+        repeat (400) tick();
         check(uio_out[6], "restart after abort");
 
         for (j = 0; j < 16; j = j + 1) begin
