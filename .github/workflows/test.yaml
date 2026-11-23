@@ -43,6 +43,7 @@ jobs:
         with:
           name: test-results
           path: |
-            test/tb.fst
             test/results.xml
+            test/**/*.fst
+            test/**/*.vcd
             test/output/*
