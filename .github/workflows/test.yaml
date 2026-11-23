@@ -27,7 +27,7 @@ jobs:
         run: |
           cd test
           make clean
-          make
+          make WAVES=1
           # make will return success even if the tests fail, so check results.xml for failed tests
           python -c "import xml.etree.ElementTree as E; r=E.parse('results.xml').getroot(); assert list(r.iter('testcase')), 'No tests ran'; assert not list(r.iter('failure')) and not list(r.iter('error')), 'Tests failed'"
 
