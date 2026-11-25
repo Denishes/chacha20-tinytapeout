@@ -1,5 +1,5 @@
 # How it works
-Chacha20 core with an lantancy of 324 cycles
+Chacha20 core with an lantancy of 324 cycles 
 
 The wrapper adds a 512-bit input shift register and
 command/status logic. All payload fields are reloaded for each operation.
